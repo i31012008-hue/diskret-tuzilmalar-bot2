@@ -1,0 +1,8 @@
+# Build and run the Telegram bot with Railway's Dockerfile builder.
+[build]
+builder = "DOCKERFILE"
+
+[deploy]
+startCommand = "python main.py"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
