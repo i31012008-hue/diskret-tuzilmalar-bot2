@@ -5,7 +5,7 @@ from typing import Optional
 
 import fitz
 import pytesseract
-from PIL import Image, ImageOps
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 from app.topics import TOPICS
 
@@ -20,12 +20,10 @@ def find_best_topic_match(query: str) -> Optional[int]:
     tokens = {word for word in normalize_text(query).split() if len(word) >= 3}
     if not tokens:
         return None
-
     ranked: list[tuple[int, int]] = []
     for topic_id, topic in TOPICS.items():
         topic_text = normalize_text(f"{topic['title']} {topic['summary']} {topic['answer']}")
-        topic_tokens = set(topic_text.split())
-        score = len(tokens & topic_tokens)
+        score = len(tokens & set(topic_text.split()))
         if score:
             ranked.append((topic_id, score))
     if not ranked:
@@ -37,19 +35,31 @@ def find_best_topic_match(query: str) -> Optional[int]:
 def answer_from_text(query: str) -> str:
     topic_id = find_best_topic_match(query)
     if topic_id is None:
-        return (
-            "Savolni aniqroq yozing yoki mavzuni 1–14 raqami bilan tanlang.\n"
-            "Mavzular: /topics"
-        )
+        return "Savolni aniqroq yozing yoki mavzuni 1–14 raqami bilan tanlang.\nMavzular: /topics"
     topic = TOPICS[topic_id]
     return f"<b>{topic['title']}</b>\n\n{topic['summary']}\n\n<b>{topic['answer']}</b>"
 
 
 def extract_text_from_image(image_bytes: bytes) -> str:
     try:
-        with Image.open(io.BytesIO(image_bytes)) as image:
-            image = ImageOps.grayscale(image)
-            return pytesseract.image_to_string(image, lang="uzb+eng").strip()
+        with Image.open(io.BytesIO(image_bytes)) as source:
+            image = ImageOps.grayscale(source)
+            image = ImageOps.autocontrast(image)
+            if image.width < 1800:
+                ratio = 1800 / image.width
+                image = image.resize((1800, int(image.height * ratio)))
+            image = ImageEnhance.Contrast(image).enhance(1.5)
+            image = image.filter(ImageFilter.SHARPEN)
+            # Math symbols are more reliably recognized with the English model; if
+            # the Uzbek language pack is installed, retry with both languages.
+            for language in ("uzb+eng", "eng"):
+                try:
+                    recognized = pytesseract.image_to_string(image, lang=language, config="--psm 6")
+                    if recognized.strip():
+                        return recognized.strip()
+                except Exception:
+                    logger.warning("Tesseract language %s is unavailable", language)
+            return ""
     except Exception:
         logger.exception("OCR image extraction failed")
         return ""
@@ -58,9 +68,7 @@ def extract_text_from_image(image_bytes: bytes) -> str:
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
     try:
         with fitz.open(stream=pdf_bytes, filetype="pdf") as pdf:
-            # Bound resource usage on small hosting plans.
-            page_text = [page.get_text() for page in list(pdf)[:20]]
-        return "\n".join(page_text).strip()
+            return "\n".join(page.get_text() for page in list(pdf)[:20]).strip()
     except Exception:
         logger.exception("PDF text extraction failed")
         return ""
