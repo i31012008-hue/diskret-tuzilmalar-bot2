@@ -1,0 +1,1 @@
+# diskret-tuzilmalar-bot2
