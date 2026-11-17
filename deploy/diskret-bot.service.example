@@ -1,0 +1,16 @@
+[Unit]
+Description=Diskret tuzilmalar Telegram bot
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_LINUX_USER
+WorkingDirectory=/opt/diskret-tuzilmalar-bot
+EnvironmentFile=/opt/diskret-tuzilmalar-bot/.env
+ExecStart=/opt/diskret-tuzilmalar-bot/.venv/bin/python /opt/diskret-tuzilmalar-bot/main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,104 +1,112 @@
-from aiogram import Router, F
-from aiogram.filters import Command
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+import logging
+
+from aiogram import F, Router
+from aiogram.filters import Command, CommandStart
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from app.config import settings
 from app.topics import TOPICS
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
 def build_topics_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    for topic_id in sorted(TOPICS.keys()):
-        builder.button(
-            text=f"{topic_id}",
-            callback_data=f"topic:{topic_id}"
-        )
-    builder.adjust(4)
+    for topic_id, topic in TOPICS.items():
+        builder.button(text=f"{topic_id}. {topic['title'][:45]}", callback_data=f"topic:{topic_id}")
+    builder.adjust(1)
     return builder.as_markup()
 
 
-@router.message(Command("start"))
-async def start(message: Message) -> None:
-    text = (
-        "Diskret tuzilmalar botiga xush kelibsiz!\n\n"
-        "Mavzularni tanlang yoki faqat mavzu raqamini yozing.\n\n"
-        "Misol: 5\n"
-        "Yoki /topics buyrug'ini yuboring."
+def format_topic(topic_id: int) -> str:
+    topic = TOPICS[topic_id]
+    return (
+        f"<b>{topic['title']}</b>\n\n"
+        f"{topic['summary']}\n\n"
+        f"<b>{topic['answer']}</b>"
     )
-    await message.answer(text, reply_markup=build_topics_keyboard())
+
+
+@router.message(CommandStart())
+async def start(message: Message) -> None:
+    await message.answer(
+        "Assalomu alaykum! Bu bot Diskret tuzilmalar fanini o'rganishga yordam beradi.\n\n"
+        "Mavzuni quyidagi tugmalardan tanlang yoki /topics buyrug'ini yuboring. "
+        "Masala matnini yuborsangiz, hozircha mavzu tanlash bo'yicha yo'l-yo'riq beraman.",
+        reply_markup=build_topics_keyboard(),
+    )
+
+
+@router.message(Command("help"))
+async def help_command(message: Message) -> None:
+    await message.answer(
+        "Buyruqlar:\n"
+        "/start — botni boshlash\n"
+        "/topics — mavzular ro'yxati\n"
+        "/help — yordam\n\n"
+        "Mavzuni raqami yoki menyudagi tugma orqali tanlang."
+    )
 
 
 @router.message(Command("topics"))
-async def topics(message: Message) -> None:
-    await message.answer("Mavzular ro'yxati:", reply_markup=build_topics_keyboard())
+async def topics_command(message: Message) -> None:
+    await message.answer("Diskret tuzilmalar mavzulari:", reply_markup=build_topics_keyboard())
 
 
 @router.callback_query(F.data.startswith("topic:"))
-async def handle_topic_callback(callback: CallbackQuery) -> None:
-    topic_id = int(callback.data.split(":")[1])
-    topic = TOPICS.get(topic_id)
-    if not topic:
-        await callback.answer("Bunday mavzu mavjud emas.")
+async def topic_callback(callback: CallbackQuery) -> None:
+    try:
+        topic_id = int((callback.data or "").split(":", maxsplit=1)[1])
+    except (IndexError, ValueError):
+        await callback.answer("Mavzu raqami noto'g'ri.", show_alert=True)
         return
 
-    answer = (
-        f"<b>{topic['title']}</b>\n\n"
-        f"<i>{topic['summary']}</i>\n\n"
-        f"{topic['answer']}"
-    )
-    await callback.message.answer(answer)
+    if topic_id not in TOPICS:
+        await callback.answer("Bunday mavzu mavjud emas.", show_alert=True)
+        return
+
+    if callback.message:
+        await callback.message.answer(format_topic(topic_id), reply_markup=build_topics_keyboard())
     await callback.answer()
 
 
-@router.message(F.text)
-async def handle_text(message: Message) -> None:
-    text = message.text.strip()
-    if not text:
-        return
-
-    try:
-        topic_id = int(text)
-    except ValueError:
-        topic_id = None
-
-    if topic_id is not None and topic_id in TOPICS:
-        topic = TOPICS[topic_id]
-        answer = (
-            f"<b>{topic['title']}</b>\n\n"
-            f"<i>{topic['summary']}</i>\n\n"
-            f"{topic['answer']}"
-        )
-        await message.answer(answer)
-        return
-
-    if "graf" in text.lower() or "to'plam" in text.lower() or "mantiq" in text.lower() or "diskret" in text.lower():
-        await message.answer(
-            "Bu mavzu haqida qisqacha tushuntirish: Diskret tuzilmalar matematik va hisoblashdagi alohida strukturalarni o'rganadi.\n\n"
-            "Javob: Diskret tuzilmalar elementlari alohida, uzluksiz bo'lmagan modellarni ifodalaydi."
-        )
-        return
-
-    await message.answer(
-        "Mavzuni tanlang yoki mavzu raqamini yozing.\n\n"
-        "Masalan: 1, 5, 10 yoki /topics"
-    )
-
-
 @router.message(F.photo)
-async def handle_photo(message: Message) -> None:
+async def photo_message(message: Message) -> None:
     await message.answer(
-        "Rasm yoki fayl bilan ishlash keyingi bosqichda qo'shiladi.\n\n"
-        "Hozircha mavzuni tanlang yoki savolingizni matn ko'rinishida yuboring.\n"
-        "Masalan: 7 yoki 'Bul algebra'"
+        "Rasm qabul qilindi, lekin hozircha rasm ichidagi matnni avtomatik o'qish (OCR) yoqilmagan.\n"
+        "Masalani matn qilib yuboring yoki mavzuni /topics orqali tanlang."
     )
 
 
 @router.message(F.document)
-async def handle_document(message: Message) -> None:
+async def document_message(message: Message) -> None:
     await message.answer(
-        "Fayl ishlovi hozircha tayyorgarlik bosqichida.\n\n"
-        "Mavzuni tanlang yoki matnli savol yuboring."
+        "Fayl qabul qilindi, ammo hozircha PDF/fayl ichidagi matnni o'qish yoqilmagan.\n"
+        "Masala matnini xabarda yuboring yoki mavzuni /topics orqali tanlang."
     )
+
+
+@router.message(F.text)
+async def text_message(message: Message) -> None:
+    text = (message.text or "").strip()
+    if text.isdecimal():
+        topic_id = int(text)
+        if topic_id in TOPICS:
+            await message.answer(format_topic(topic_id), reply_markup=build_topics_keyboard())
+            return
+
+    await message.answer(
+        "Mavzuni menyudan tanlang yoki raqamini yuboring (1–14).\n"
+        "Mavzular uchun /topics buyrug'ini yuboring."
+    )
+
+
+@router.errors()
+async def handle_unexpected_error(event, exception: Exception) -> bool:
+    logger.exception("Xabarni qayta ishlashda kutilmagan xatolik", exc_info=exception)
+    update = getattr(event, "update", None)
+    message = getattr(update, "message", None)
+    if message:
+        await message.answer("Xatolik yuz berdi. Iltimos, birozdan keyin qayta urinib ko'ring.")
+    return True
