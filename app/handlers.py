@@ -1,25 +1,65 @@
 import logging
+from typing import Dict, Optional
 
-from aiogram import F, Router
-from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+try:
+    import fitz  # PyMuPDF
+except Exception:  # pragma: no cover
+    fitz = None
 
-from app.topics import TOPICS
+try:
+    import pytesseract
+    from PIL import Image
+except Exception:  # pragma: no cover
+    pytesseract = None
+    Image = None
 
-router = Router()
+
 logger = logging.getLogger(__name__)
 
 
-def build_topics_keyboard() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
+def normalize_text(text: str) -> str:
+    return " ".join(text.lower().replace("\n", " ").split())
+
+
+def find_best_topic_match(query: str) -> Optional[int]:
+    if not query:
+        return None
+
+    from app.topics import TOPICS
+
+    query_norm = normalize_text(query)
+    ranked: list[tuple[int, int]] = []
+
     for topic_id, topic in TOPICS.items():
-        builder.button(text=f"{topic_id}. {topic['title'][:45]}", callback_data=f"topic:{topic_id}")
-    builder.adjust(1)
-    return builder.as_markup()
+        haystack = normalize_text(f"{topic['title']} {topic['summary']} {topic['answer']}")
+        score = 0
+        for keyword in query_norm.split():
+            if len(keyword) < 3:
+                continue
+            if keyword in haystack:
+                score += 2
+        if query_norm in haystack:
+            score += 5
+        if score > 0:
+            ranked.append((topic_id, score))
+
+    if not ranked:
+        return None
+
+    ranked.sort(key=lambda item: item[1], reverse=True)
+    return ranked[0][0]
 
 
-def format_topic(topic_id: int) -> str:
+def answer_from_text(query: str) -> str:
+    from app.topics import TOPICS
+
+    topic_id = find_best_topic_match(query)
+    if topic_id is None:
+        return (
+            "Mavzu tanlang yoki raqamini yuboring (1-14).\n\n"
+            "Masalan: /topics yoki 5"
+        )
+
     topic = TOPICS[topic_id]
     return (
         f"<b>{topic['title']}</b>\n\n"
@@ -28,85 +68,29 @@ def format_topic(topic_id: int) -> str:
     )
 
 
-@router.message(CommandStart())
-async def start(message: Message) -> None:
-    await message.answer(
-        "Assalomu alaykum! Bu bot Diskret tuzilmalar fanini o'rganishga yordam beradi.\n\n"
-        "Mavzuni quyidagi tugmalardan tanlang yoki /topics buyrug'ini yuboring. "
-        "Masala matnini yuborsangiz, hozircha mavzu tanlash bo'yicha yo'l-yo'riq beraman.",
-        reply_markup=build_topics_keyboard(),
-    )
+def extract_text_from_image(image_bytes: bytes) -> str:
+    if pytesseract is None or Image is None:
+        return ""
 
-
-@router.message(Command("help"))
-async def help_command(message: Message) -> None:
-    await message.answer(
-        "Buyruqlar:\n"
-        "/start — botni boshlash\n"
-        "/topics — mavzular ro'yxati\n"
-        "/help — yordam\n\n"
-        "Mavzuni raqami yoki menyudagi tugma orqali tanlang."
-    )
-
-
-@router.message(Command("topics"))
-async def topics_command(message: Message) -> None:
-    await message.answer("Diskret tuzilmalar mavzulari:", reply_markup=build_topics_keyboard())
-
-
-@router.callback_query(F.data.startswith("topic:"))
-async def topic_callback(callback: CallbackQuery) -> None:
     try:
-        topic_id = int((callback.data or "").split(":", maxsplit=1)[1])
-    except (IndexError, ValueError):
-        await callback.answer("Mavzu raqami noto'g'ri.", show_alert=True)
-        return
-
-    if topic_id not in TOPICS:
-        await callback.answer("Bunday mavzu mavjud emas.", show_alert=True)
-        return
-
-    if callback.message:
-        await callback.message.answer(format_topic(topic_id), reply_markup=build_topics_keyboard())
-    await callback.answer()
+        image = Image.open(__import__('io').BytesIO(image_bytes))
+        text = pytesseract.image_to_string(image, lang="uzb+eng")
+        return (text or "").strip()
+    except Exception as exc:  # pragma: no cover
+        logger.exception("OCR image read failed: %s", exc)
+        return ""
 
 
-@router.message(F.photo)
-async def photo_message(message: Message) -> None:
-    await message.answer(
-        "Rasm qabul qilindi, lekin hozircha rasm ichidagi matnni avtomatik o'qish (OCR) yoqilmagan.\n"
-        "Masalani matn qilib yuboring yoki mavzuni /topics orqali tanlang."
-    )
+def extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    if fitz is None:
+        return ""
 
-
-@router.message(F.document)
-async def document_message(message: Message) -> None:
-    await message.answer(
-        "Fayl qabul qilindi, ammo hozircha PDF/fayl ichidagi matnni o'qish yoqilmagan.\n"
-        "Masala matnini xabarda yuboring yoki mavzuni /topics orqali tanlang."
-    )
-
-
-@router.message(F.text)
-async def text_message(message: Message) -> None:
-    text = (message.text or "").strip()
-    if text.isdecimal():
-        topic_id = int(text)
-        if topic_id in TOPICS:
-            await message.answer(format_topic(topic_id), reply_markup=build_topics_keyboard())
-            return
-
-    await message.answer(
-        "Mavzuni menyudan tanlang yoki raqamini yuboring (1–14).\n"
-        "Mavzular uchun /topics buyrug'ini yuboring."
-    )
-
-
-@router.errors()
-async def handle_unexpected_error(event, exception: Exception) -> bool:
-    logger.exception("Xabarni qayta ishlashda kutilmagan xatolik", exc_info=exception)
-    update = getattr(event, "update", None)
-    message = getattr(update, "message", None)
-    if message:
-        await message.answer("Xatolik yuz berdi. Iltimos, birozdan keyin qayta urinib ko'ring.")
-    return True
+    try:
+        pdf = fitz.open(stream=pdf_bytes, filetype="pdf")
+        pages: list[str] = []
+        for page in pdf:
+            pages.append(page.get_text())
+        return "\n".join(pages).strip()
+    except Exception as exc:  # pragma: no cover
+        logger.exception("PDF text extraction failed: %s", exc)
+        return ""
