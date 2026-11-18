@@ -1,9 +1,19 @@
+import html
 import itertools
 import re
 from typing import Any
 
 # Supports the operators used in the course material.
 _TOKEN_RE = re.compile(r"<->|<=>|↔|⊕|\bXOR\b|->|→|=>|[A-Da-d]|[()]|[&∧*]|[|∨]|[Vv]|[~¬!]")
+_OPERATORS = ("&", "∧", "*", "∨", "|", "→", "->", "↔", "<->", "<=>", "⊕", "¬", "~", "!")
+_OP_SYMBOL = {
+    "not": "¬",
+    "and": "∧",
+    "or": "∨",
+    "xor": "⊕",
+    "implies": "→",
+    "iff": "↔",
+}
 
 
 class LogicSyntaxError(ValueError):
@@ -12,7 +22,8 @@ class LogicSyntaxError(ValueError):
 
 def _normalize(expression: str) -> str:
     expression = expression.strip()
-    expression = re.sub(r"^[a-iA-I]\s*[).:-]\s*", "", expression)
+    # Strip exercise labels such as "a)" or "1.", but never the minus in "A -> B".
+    expression = re.sub(r"^(?:[a-iA-I]|\d+)\s*[).:]\s*", "", expression)
     expression = expression.replace("−", "-").replace("–", "-")
     expression = expression.replace("⟷", "↔").replace("⇔", "↔").replace("⇒", "→")
     expression = expression.replace("≡", "↔")
@@ -120,33 +131,142 @@ def _evaluate(tree: Any, values: dict[str, bool]) -> bool:
     raise LogicSyntaxError("Unknown logical operation")
 
 
+def _label(tree: Any) -> str:
+    operation = tree[0]
+    if operation == "var":
+        return tree[1]
+    if operation == "not":
+        inner = _label(tree[1])
+        if tree[1][0] == "var":
+            return "¬" + inner
+        return "¬(" + inner + ")"
+    left = _label(tree[1])
+    right = _label(tree[2])
+    if tree[1][0] not in ("var", "not"):
+        left = "(" + left + ")"
+    if tree[2][0] not in ("var", "not"):
+        right = "(" + right + ")"
+    return left + _OP_SYMBOL[operation] + right
+
+
+def _variables(tree: Any) -> list[str]:
+    found: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if node[0] == "var":
+            found.add(node[1])
+        elif node[0] == "not":
+            walk(node[1])
+        else:
+            walk(node[1])
+            walk(node[2])
+
+    walk(tree)
+    return sorted(found)
+
+
+def _steps(tree: Any) -> list[tuple[str, Any]]:
+    steps: list[tuple[str, Any]] = []
+
+    def walk(node: Any) -> None:
+        if node[0] == "var":
+            return
+        if node[0] == "not":
+            walk(node[1])
+        else:
+            walk(node[1])
+            walk(node[2])
+        label = "F" if node is tree else _label(node)
+        if all(existing != label for existing, _ in steps):
+            steps.append((label, node))
+
+    walk(tree)
+    return steps
+
+
+def _why_false(tree: Any) -> str:
+    operation = tree[0]
+    if operation == "implies":
+        return "Implikatsiya faqat chap tomon 1, o'ng tomon 0 bo'lganda 0 bo'ladi."
+    if operation == "and":
+        return "Kesishma 0, chunki ikkala tomon ham 1 bo'lishi shart."
+    if operation == "or":
+        return "Yig'indi 0, chunki ikkala tomon ham 0."
+    if operation == "xor":
+        return "XOR 0, chunki ikkala tomon teng."
+    if operation == "iff":
+        return "Ekvivalentlik 0, chunki tomonlar teng emas."
+    if operation == "not":
+        return "Inkor qiymatni teskarisiga o'giradi."
+    return ""
+
+
+def _esc(text: str) -> str:
+    return html.escape(text, quote=False)
+
+
 def _format_expression(expression: str) -> str:
     cleaned = _normalize(expression)
     cleaned = re.sub(r"\s+", " ", cleaned)
-    cleaned = cleaned.replace("->", "→").replace("<->", "↔").replace("&", "∧")
+    cleaned = cleaned.replace("<=>", "↔").replace("<->", "↔").replace("->", "→").replace("&", "∧")
     return cleaned.strip(" ;,.\t")
 
 
 def solve_expression(expression: str) -> str:
     parser = _Parser(expression)
     tree = parser.parse()
-    variables = sorted(set(re.findall(r"[A-D]", _normalize(expression).upper())))
+    variables = _variables(tree)
     if not variables or len(variables) > 4:
         raise LogicSyntaxError("Expression must contain 1–4 variables (A–D)")
 
-    header = " ".join(variables) + " | F"
-    rows = [header, "-" * len(header)]
-    result_values: list[str] = []
+    steps = _steps(tree)
+    columns: list[tuple[str, list[str]]] = [(label, []) for label, _ in steps]
+    variable_rows: list[list[str]] = []
+    false_reason = ""
     for bits in itertools.product((False, True), repeat=len(variables)):
         assignment = dict(zip(variables, bits))
-        output = _evaluate(tree, assignment)
-        result_values.append("1" if output else "0")
-        rows.append(" ".join("1" if bit else "0" for bit in bits) + " | " + ("1" if output else "0"))
+        variable_rows.append(["1" if bit else "0" for bit in bits])
+        for index, (_, node) in enumerate(steps):
+            value = _evaluate(node, assignment)
+            columns[index][1].append("1" if value else "0")
+            if node is tree and not value and not false_reason:
+                shown_bits = ", ".join(
+                    f"{name}={bit}" for name, bit in zip(variables, variable_rows[-1])
+                )
+                false_reason = f"Birinchi 0 qator: {shown_bits}. {_why_false(tree)}"
 
+    headers = variables + [label for label, _ in columns]
+    widths = [len(header) for header in headers]
+
+    def format_row(cells: list[str]) -> str:
+        return " | ".join(cell.ljust(widths[index]) for index, cell in enumerate(cells))
+
+    lines = [format_row(headers)]
+    lines.append("-" * len(lines[0]))
+    for row_index, bits in enumerate(variable_rows):
+        cells = bits + [values[row_index] for _, values in columns]
+        lines.append(format_row(cells))
+
+    result_values = columns[-1][1]
+    ones = result_values.count("1")
+    total = len(result_values)
+    if ones == total:
+        verdict = "Tautologiya: har bir qatorda rost."
+    elif ones == 0:
+        verdict = "Ziddiyat: hech bir qatorda rost emas."
+    else:
+        verdict = f"Ba'zi hollarda rost: {ones} ta qatorda 1, {total - ones} ta qatorda 0."
+
+    shown = _esc(_format_expression(expression))
+    table = _esc("\n".join(lines))
+    extra = f"\n{_esc(false_reason)}" if false_reason and ones not in (0, total) else ""
+    if ones == 0 and false_reason:
+        extra = f"\n{_esc(false_reason)}"
     return (
-        f"<b>{_format_expression(expression)}</b>\n"
-        f"<pre>{'&#10;'.join(rows)}</pre>"
-        f"Yakuniy qiymatlar: <code>{''.join(result_values)}</code>"
+        f"<b>{shown}</b>\n"
+        f"<pre>{table}</pre>\n"
+        f"Yakuniy qiymatlar: <code>{''.join(result_values)}</code>\n"
+        f"{_esc(verdict)}{extra}"
     )
 
 
@@ -155,14 +275,11 @@ def solve_logic_text(text: str) -> list[str]:
     answers: list[str] = []
     seen: set[str] = set()
     for line in text.splitlines():
-        # Avoid parsing the XOR/implication definitions often printed above exercises.
-        if "=" in line:
-            continue
         for candidate in re.split(r";", line):
             normalized = _normalize(candidate)
-            if not any(operator in normalized for operator in ("&", "∧", "∨", "→", "->", "↔", "⊕", "¬", "~")):
+            if not any(operator in normalized for operator in _OPERATORS):
                 continue
-            if len(set(re.findall(r"[A-D]", normalized.upper()))) < 2:
+            if len(set(re.findall(r"[A-D]", normalized.upper()))) < 1:
                 continue
             key = re.sub(r"\s+", "", normalized).lower()
             if key in seen:
