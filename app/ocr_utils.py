@@ -44,13 +44,24 @@ def find_best_topic_match(query: str) -> Optional[int]:
 
 
 def answer_from_text(query: str) -> str:
+    from app.logic_solver import LogicSyntaxError, solve_expression, solve_logic_text
     from app.topics import TOPICS
+
+    answers = solve_logic_text(query)
+    if not answers:
+        try:
+            answers = [solve_expression(query)]
+        except LogicSyntaxError:
+            answers = []
+    if answers:
+        return "\n\n".join(answers)
 
     topic_id = find_best_topic_match(query)
     if topic_id is None:
         return (
             "Mavzu tanlang yoki raqamini yuboring (1-14).\n\n"
-            "Masalan: /topics yoki 5"
+            "Masalan: /topics yoki 5\n"
+            "Mantiqiy formula yuborsangiz, rostlik jadvali tuziladi. Masalan: A -> B"
         )
 
     topic = TOPICS[topic_id]

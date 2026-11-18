@@ -2,17 +2,17 @@ TOPICS = {
     1: {
         "title": "Kirish. Diskret tuzilmalar va ularga misollar.",
         "summary": "Diskret tuzilmalar - uzluksiz bo'lmagan, hisoblash uchun ma'lum strukturalardan tashkil topgan matematik tushunchalar.",
-        "answer": "Javob: Diskret tuzilmalar - cheksiz bo'lmagan, diskret (alohida) elementlardan tashkil topgan tuzilmalar. Masalan, to'plamlar, grafiklar, daraxtlar, va mantiqiy funksiyalar."
+        "answer": "Javob: Diskret tuzilmalar alohida, uzluksiz bo'lmagan elementlardan tuziladi. Ular chekli ham, cheksiz ham bo'lishi mumkin. Masalan, to'plamlar, munosabatlar, graflar va mantiqiy funksiyalar."
     },
     2: {
         "title": "To'plamlar ustida amallar. Eyler-Venn diagrammalari.",
         "summary": "To'plamlar bilan birlashma, kesishma, ayirma va komplement amallari ishlatiladi.",
-        "answer": "Javob: A ∪ B - birlashma, A ∩ B - kesishma, A \ B - ayirma, A' - komplement. Eyler-Venn diagrammasi bu amallarni vizual ko'rsatishda ishlatiladi."
+        "answer": "Javob: A \u222a B - birlashma, A \u2229 B - kesishma, A \\ B - ayirma, A' - komplement. Eyler-Venn diagrammasi bu amallarni vizual ko'rsatishda ishlatiladi."
     },
     3: {
         "title": "Tartiblangan to'plamlar.",
         "summary": "Elementlar o'rinlari muhim bo'ladigan holatlarda tartiblangan juftliklar ishlatiladi.",
-        "answer": "Javob: Tartiblangan to'plamlar (a, b) ko'rinishda yoziladi. Ularning tartibi muhim: (1, 2) ≠ (2, 1)."
+        "answer": "Javob: Tartiblangan to'plamlar (a, b) ko'rinishda yoziladi. Ularning tartibi muhim: (1, 2) \u2260 (2, 1)."
     },
     4: {
         "title": "Munosabatlar turlari.",
@@ -22,7 +22,7 @@ TOPICS = {
     5: {
         "title": "Kombinatorikaning asosiy qoidalari.",
         "summary": "Qo'shish va ko'paytirish qoidalari kombinatorik hisoblashlarda asosiy hisoblanadi.",
-        "answer": "Javob: Agar biror ishni n usul bilan, boshqa ishni m usul bilan qilish mumkin bo'lsa, u holda umumiy ish n·m yo'l bilan bajariladi. Agar tanlovlardan biri bo'lsa, n + m qo'shish qoidasi ishlatiladi."
+        "answer": "Javob: Agar biror ishni n usul bilan, boshqa ishni m usul bilan qilish mumkin bo'lsa, u holda umumiy ish n\u00b7m yo'l bilan bajariladi. Agar tanlovlardan biri bo'lsa, n + m qo'shish qoidasi ishlatiladi."
     },
     6: {
         "title": "Kombinatorikaning to'plamlar quyvatini aniqlashga tatbiqi.",
@@ -36,8 +36,17 @@ TOPICS = {
     },
     8: {
         "title": "Mantiq qonunlari. Mantiq funksiyalarini uchun rostlik jadvalini tuzish.",
-        "summary": "Mantiq qonunlari formulalarni soddalashtirish va rostlik jadvalini qurishda ishlatiladi.",
-        "answer": "Javob: Mantiq funksiyalari uchun rostlik jadvali barcha mumkin bo'lgan qiymatlar kombinatsiyasini ko'rsatadi va funktsiya qaysi kiritishlarda rost bo'lishini aniqlaydi."
+        "summary": "Rostlik jadvali formulani har bir 0 va 1 qiymatda, ichkaridan tashqariga hisoblab tekshiradi.",
+        "answer": (
+            "Javob:\n"
+            "1. O'zgaruvchilarni yozing. n ta harf bo'lsa, qatorlar soni 2^n.\n"
+            "2. Chapdagi harf sekin o'zgaradi: avval 0, keyin 1.\n"
+            "3. Ichkaridan hisoblang. Tartib: \u00ac, keyin \u2227, \u2295, \u2228, \u2192, oxirida \u2194.\n"
+            "4. A \u2192 B faqat A=1 va B=0 da 0. Qolgan uch holda 1, shuning uchun ustun 1101.\n"
+            "5. F ustunini yuqoridan pastga o'qing.\n"
+            "Hammasi 1 bo'lsa tautologiya. Hammasi 0 bo'lsa ziddiyat. Aralash bo'lsa, formula faqat ba'zi qiymatlarda rost.\n\n"
+            "Formula yuboring, masalan A -> B yoki A*(B -> \u00acC). Bot oraliq ustunlarni ham chiqaradi."
+        ),
     },
     9: {
         "title": "Ikki qiymatli elementlar.",
@@ -67,6 +76,6 @@ TOPICS = {
     14: {
         "title": "Yo'naltirilgan graf.",
         "summary": "Qirralari yo'nalishga ega bo'lgan graflar, masalan, jarayonlar va vazifalar oqimi.",
-        "answer": "Javob: Yo'naltirilgan grafda qirralar o'ng yoki chap yo'nalishni bildiradi. Bunday grafiklar, masalan, vazifa ketma-ketligi va ishlash oqimi uchun ishlatiladi."
+        "answer": "Javob: Yo'naltirilgan grafda har bir qirra bir tugundan ikkinchisiga yo'nalgan. Bunday graflar vazifa ketma-ketligi va ishlash oqimini ifodalashda ishlatiladi."
     },
 }
